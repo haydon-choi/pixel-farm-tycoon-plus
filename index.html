@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pixel Farm Tycoon Plus</title>
+  <style>
+    canvas {
+      border: 2px solid #444;
+      image-rendering: pixelated;
+    }
+    body {
+      background: #f8f0d8;
+      font-family: sans-serif;
+      text-align: center;
+    }
+    #shop, #buildings, #inventory, #quests {
+      margin-top: 10px;
+    }
+    button {
+      margin: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>✨ Pixel Farm Tycoon Plus ✨</h1>
+  <canvas id="game" width="320" height="320"></canvas>
+  <p id="status">Gold: 0</p>
+
+  <div id="shop">
+    <h3>🛒 Shop</h3>
+    <button onclick="buySeed()">Buy Seed (10G)</button>
+    <button onclick="hireNpc()">Hire NPC (50G)</button>
+  </div>
+
+  <div id="buildings">
+    <h3>🏡 Upgrades</h3>
+    <button onclick="buyBarn()">Build Barn (100G)</button>
+    <button onclick="upgradeTools()">Upgrade Tools (75G)</button>
+  </div>
+
+  <div id="inventory">
+    <h3>🎒 Inventory</h3>
+    <p id="inventory-status">No items yet.</p>
+  </div>
+
+  <div id="quests">
+    <h3>📜 Quests</h3>
+    <p id="quest-status">Grow 5 crops to earn 20G!</p>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const TILE = 32;
+    const ROWS = 10;
+    const COLS = 10;
+    let GROW_TIME = 150;
+    let gold = parseInt(localStorage.getItem('gold')) || 50;
+    let seeds = parseInt(localStorage.getItem('seeds')) || 5;
+    let npcHired = localStorage.getItem('npcHired') === 'true';
+    let barnBuilt = localStorage.getItem('barnBuilt') === 'true';
+    let toolUpgraded = localStorage.getItem('toolUpgraded') === 'true';
+    let grownCrops = parseInt(localStorage.getItem('grownCrops')) || 0;
+
+    if (toolUpgraded) GROW_TIME = 100;
+
+    const GOLD_PER_HARVEST = 5;
+
+    const field = Array.from({ length: ROWS }, (_, y) =>
+      Array.from({ length: COLS }, (_, x) => parseInt(localStorage.getItem(`tile_${y}_${x}`)) || 0)
+    );
+    const growTime = Array.from({ length: ROWS }, (_, y) =>
+      Array.from({ length: COLS }, (_, x) => parseInt(localStorage.getItem(`grow_${y}_${x}`)) || 0)
+    );
+
+    const img = new Image();
+    img.src = "/img/pixel_farm_tileset_extended.png";
+
+    img.onload = () => {
+      requestAnimationFrame(gameLoop);
+    };
+
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / TILE);
+      const y = Math.floor((e.clientY - rect.top) / TILE);
+      if (field[y][x] === 0 && seeds > 0) {
+        field[y][x] = 1;
+        growTime[y][x] = 0;
+        seeds--;
+        updateStatus();
+      } else if (field[y][x] === 2) {
+        field[y][x] = 0;
+        gold += GOLD_PER_HARVEST;
+        grownCrops++;
+        checkQuest();
+        updateStatus();
+      }
+    });
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          ctx.drawImage(img, 0, 0, 32, 32, x * TILE, y * TILE, TILE, TILE);
+          if (field[y][x] === 1) ctx.drawImage(img, 32, 0, 32, 32, x * TILE, y * TILE, TILE, TILE);
+          else if (field[y][x] === 2) ctx.drawImage(img, 64, 0, 32, 32, x * TILE, y * TILE, TILE, TILE);
+        }
+      }
+      if (npcHired) ctx.drawImage(img, 96, 0, 32, 32, 288, 288, TILE, TILE);
+      if (barnBuilt) ctx.drawImage(img, 128, 0, 32, 32, 0, 288, TILE, TILE);
+    }
+
+    function updateGrowth() {
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (field[y][x] === 1) {
+            growTime[y][x]++;
+            if (growTime[y][x] > GROW_TIME) {
+              field[y][x] = 2;
+            }
+          } else if (npcHired && field[y][x] === 2) {
+            field[y][x] = 0;
+            gold += GOLD_PER_HARVEST;
+            grownCrops++;
+            checkQuest();
+            updateStatus();
+          }
+        }
+      }
+    }
+
+    function updateStatus() {
+      document.getElementById("status").innerText = `Gold: ${gold} | Seeds: ${seeds}`;
+      document.getElementById("inventory-status").innerText = `Seeds: ${seeds}, NPC: ${npcHired ? 'Hired' : 'None'}`;
+      localStorage.setItem('gold', gold);
+      localStorage.setItem('seeds', seeds);
+      localStorage.setItem('npcHired', npcHired);
+      localStorage.setItem('barnBuilt', barnBuilt);
+      localStorage.setItem('toolUpgraded', toolUpgraded);
+      localStorage.setItem('grownCrops', grownCrops);
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          localStorage.setItem(`tile_${y}_${x}`, field[y][x]);
+          localStorage.setItem(`grow_${y}_${x}`, growTime[y][x]);
+        }
+      }
+    }
+
+    function checkQuest() {
+      if (grownCrops >= 5) {
+        gold += 20;
+        document.getElementById("quest-status").innerText = "Quest Complete! +20G";
+      }
+    }
+
+    function buySeed() {
+      if (gold >= 10) {
+        gold -= 10;
+        seeds++;
+        updateStatus();
+      }
+    }
+
+    function hireNpc() {
+      if (!npcHired && gold >= 50) {
+        gold -= 50;
+        npcHired = true;
+        updateStatus();
+      }
+    }
+
+    function buyBarn() {
+      if (!barnBuilt && gold >= 100) {
+        gold -= 100;
+        barnBuilt = true;
+        updateStatus();
+      }
+    }
+
+    function upgradeTools() {
+      if (!toolUpgraded && gold >= 75) {
+        gold -= 75;
+        toolUpgraded = true;
+        GROW_TIME = 100;
+        updateStatus();
+      }
+    }
+
+    function gameLoop() {
+      updateGrowth();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    updateStatus();
+  </script>
+</body>
+</html>
